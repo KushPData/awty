@@ -1,15 +1,19 @@
 package edu.uw.ischool.kushp03.awty
 
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import android.telephony.SmsManager
+import androidx.core.app.ActivityCompat
 
 class MainActivity : AppCompatActivity() {
     private lateinit var messageEditText: EditText
@@ -20,6 +24,7 @@ class MainActivity : AppCompatActivity() {
     private var executorService = Executors.newSingleThreadScheduledExecutor()
 
     private var serviceStatus: Boolean = false
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,17 +58,54 @@ class MainActivity : AppCompatActivity() {
         var intervalInMS: Long = 0
 
         if(message.isNotEmpty() && phoneNumber.isNotEmpty() && interval != null && interval > 0) {
-            intervalInMS = (interval * 60 * 1000).toLong()
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED) {
+                intervalInMS = (interval * 60 * 1000).toLong()
+//                startStopButton.text = "Stop"
+
+                executorService.scheduleWithFixedDelay({
+                    runOnUiThread {
+//                        Toast.makeText(applicationContext, "$phoneNumber: $message", Toast.LENGTH_SHORT).show()
+                        sendSms(phoneNumber, message)
+                    }
+                },0, intervalInMS, TimeUnit.MILLISECONDS)
+
+                serviceStatus = true
+            } else {
+                ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.SEND_SMS), 1)
+            }
+        }
+
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+        if (requestCode == 1) {
+            if(grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                val message = messageEditText.text.toString().trim()
+                val phoneNumber = phoneNumberEditText.text.toString().trim()
+                sendSms(phoneNumber, message)
+            } else {
+                Toast.makeText(applicationContext, "SMS permission denied", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun sendSms(phoneNumber: String, message: String) {
+        try {
             startStopButton.text = "Stop"
+            val smsManager = SmsManager.getDefault()
 
-
-            executorService.scheduleWithFixedDelay({
-                runOnUiThread {
-                    Toast.makeText(applicationContext, "$phoneNumber: $message", Toast.LENGTH_SHORT).show()
-                }
-            },0, intervalInMS, TimeUnit.MILLISECONDS)
-
-            serviceStatus = true
+            smsManager.sendTextMessage(phoneNumber, null, message, null, null)
+            Toast.makeText(applicationContext, "Message sent successfully", Toast.LENGTH_SHORT).show()
+        }
+        catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(applicationContext, "Message failed to send", Toast.LENGTH_SHORT).show()
         }
 
     }
@@ -80,14 +122,18 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
 
         if(serviceStatus) {
-            startService()
+//            startService()
+            startStopButton = findViewById(R.id.startStopButton)
+            startStopButton.text = "Stop"
         }
     }
 
     override fun onResume() {
         super.onResume()
         if(serviceStatus) {
-            startService()
+//            startService()
+            startStopButton = findViewById(R.id.startStopButton)
+            startStopButton.text = "Stop"
         }
     }
 }
